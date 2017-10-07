@@ -1,0 +1,16 @@
+..\build\user_uart.o: ..\User\User_Uart.c
+..\build\user_uart.o: ..\User\User_Uart.h
+..\build\user_uart.o: ..\Drivers\include\lpc17xx_uart.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\PACK\Keil\LPC1700_DFP\1.0.0\Device\Include\LPC17xx.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\PACK\ARM\CMSIS\3.20.4\CMSIS\Include\core_cm3.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\ARMCC\bin\..\include\stdint.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\PACK\ARM\CMSIS\3.20.4\CMSIS\Include\core_cmInstr.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\PACK\ARM\CMSIS\3.20.4\CMSIS\Include\core_cmFunc.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\PACK\Keil\LPC1700_DFP\1.0.0\Device\Include\system_LPC17xx.h
+..\build\user_uart.o: ..\Drivers\include\lpc_types.h
+..\build\user_uart.o: ..\User\lpc17xx_libcfg.h
+..\build\user_uart.o: ..\Drivers\include\lpc17xx_pinsel.h
+..\build\user_uart.o: ..\User\debug_frmwrk.h
+..\build\user_uart.o: ..\User\Messaging.h
+..\build\user_uart.o: ..\User\Messaging_PC.h
+..\build\user_uart.o: D:\install\Keil_v5\ARM\ARMCC\bin\..\include\stdio.h
