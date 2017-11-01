@@ -7,6 +7,7 @@
 "..\build\ac_motordrivermsg.o"
 "..\build\messaging_pc.o"
 "..\build\serial.o"
+"..\build\lpc17xx_wdt.o"
 "..\build\lpc17xx_clkpwr.o"
 "..\build\lpc17xx_exti.o"
 "..\build\lpc17xx_gpio.o"
@@ -19,7 +20,7 @@
 "..\build\lpc17xx_libcfg_default.o"
 "..\build\startup_lpc17xx.o"
 "..\build\system_lpc17xx.o"
---library_type=microlib --strict --scatter "..\Build\Fixed_MCU.sct"
+--strict --scatter "..\Build\Fixed_MCU.sct"
 --summary_stderr --info summarysizes --map --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
 --list ".\Fixed_MCU.map" -o ..\Build\Fixed_MCU.axf

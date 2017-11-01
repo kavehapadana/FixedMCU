@@ -1,6 +1,8 @@
 
 /* Includes ------------------------------------------------------------------- */
 #include "User_GPIO.h"
+#include "lpc17xx_pinsel.h"
+
 void pinConfig(pin *p)
 {
   pin *pin1;

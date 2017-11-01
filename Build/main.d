@@ -19,3 +19,4 @@
 ..\build\main.o: ..\User\AC_MotorDriverMsg.h
 ..\build\main.o: D:\install\Keil_v5\ARM\ARMCC\bin\..\include\stdio.h
 ..\build\main.o: ..\Drivers\include\lpc17xx_exti.h
+..\build\main.o: ..\User\lpc17xx_wdt.h

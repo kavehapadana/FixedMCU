@@ -48,7 +48,7 @@
           <OutputName>Fixed_MCU</OutputName>
           <CreateExecutable>1</CreateExecutable>
           <CreateLib>0</CreateLib>
-          <CreateHexFile>0</CreateHexFile>
+          <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
           <BrowseInformation>1</BrowseInformation>
           <ListingPath>.\</ListingPath>
@@ -218,7 +218,7 @@
             <hadIRAM2>1</hadIRAM2>
             <hadIROM2>0</hadIROM2>
             <StupSel>8</StupSel>
-            <useUlib>1</useUlib>
+            <useUlib>0</useUlib>
             <EndSel>0</EndSel>
             <uLtcg>0</uLtcg>
             <RoSelD>3</RoSelD>
@@ -432,6 +432,16 @@
               <FileName>Messaging_PC.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\Messaging_PC.c</FilePath>
+            </File>
+            <File>
+              <FileName>serial.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\serial.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>lpc17xx_wdt.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\lpc17xx_wdt.c</FilePath>
             </File>
           </Files>
         </Group>

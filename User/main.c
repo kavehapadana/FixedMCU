@@ -6,6 +6,7 @@
 #define	 USRATS_DEFINES
 #define  VARIABLES
 #define	 MY_TEST
+#define  UNUSED_PINS
 #include "lpc17xx_libcfg.h"
 #include "lpc17xx_timer.h"
 #include "User_Uart.h"
@@ -17,7 +18,7 @@
 #include "AC_MotorDriverMsg.h"
 #include <stdio.h>
 #include "lpc17xx_exti.h"
-
+#include "lpc17xx_wdt.h"
 
 //timer initialization
 TIM_TIMERCFG_Type TIM_ConfigStruct;
@@ -43,6 +44,9 @@ FunctionalState LEDStatus = ENABLE;
 #define PROXY_INT_PRIORITY    11
 #define TIMER0_INT_PRIORITY   10
 #define TIMER1_INT_PRIORITY   20
+
+//Declare WatchDog Error 
+#define WDT_TIMEOUT 2000000
 
 // Declare Push Button Pins
 pin Button_1 = {0,7,0};
@@ -71,6 +75,45 @@ uint8_t proxyStateFlag;
 
 uint8_t motorStartFlag;
 uint8_t motorStateFlag;
+
+#ifdef UNUSED_PINS
+pin UnUseP0_17 = {0,17,1};
+pin UnUseP0_18 = {0,18,1};
+pin UnUseP0_19 = {0,19,1};
+pin UnUseP0_21 = {0,21,1};
+pin UnUseP0_22 = {0,22,1};
+pin UnUseP0_23 = {0,23,1};
+pin UnUseP0_24 = {0,24,1};
+pin UnUseP0_26 = {0,26,1};
+pin UnUseP0_27_SDA0 = {0,27,1};
+pin UnUseP0_28_SCL0 = {0,28,1};
+pin UnUseP1_16 = {1,16,1};
+pin UnUseP1_17 = {1,17,1};
+pin UnUseP1_19 = {1,19,1};
+pin UnUseP1_20 = {1,20,1};
+pin UnUseP1_21_SCK0 = {1,21,1};
+pin UnUseP1_22_SSEL0 = {1,22,1};
+pin UnUseP1_23_MISO0 = {1,23,1};
+pin UnUseP1_24_MOSI0 = {1,24,1};
+pin UnUseP1_25_MOSI_SPin = {1,25,1};
+pin UnUseP1_29 = {1,29,1};
+pin UnUseP1_30_VAnalog1 = {1,30,1};
+pin UnUseP1_31_VAnalog2 = {1,31,1};
+pin UnUseP2_0 = {2,0,1};
+pin UnUseP2_1 = {2,1,1};
+pin UnUseP2_2 = {2,2,1};
+pin UnUseP2_3 = {2,3,1};
+pin UnUseP2_4 = {2,4,1};
+pin UnUseP2_5 = {2,5,1};
+pin UnUseP2_6 = {2,6,1};
+pin UnUseP2_7 = {2,7,1};
+pin UnUseP2_8 = {2,8,1};
+pin UnUseP2_9 = {2,9,1};
+pin UnUseP4_28 = {4,28,1};
+pin UnUseP4_29 = {4,29,1};
+pin UnUseP3_26 = {3,26,1};
+	
+#endif
 
 #endif
 #ifdef IMPORTANT_VAR
@@ -114,6 +157,7 @@ int tempCnt = 0;
 	void Init_Timer0(void);
 	void Init_Timer1(void);
 	void IO_Initialling(void);
+  void IO_InitUnUsedPins(void);
 	void Encoder_Initialling(void);
 	void Trans_2PC_Message(void);
 	void Serials_Init(void);
@@ -147,18 +191,32 @@ uint8_t mn[8] = {0x23};
 uint32_t PC_Sent_Interval_cnt;
 
 uint8_t myData[100];
-int maxBuff = 300;
+uint8_t maxBuff = 254;
 int rcvLen = 0;
 int cntBuffLen = 0;
+uint8_t feedWDflage = 0;
 
 int main(void)
 {
+	int ii =0;
+	//WDT_Init(WDT_CLKSRC_IRC, WDT_MODE_RESET);
+	//WDT_Start(WDT_TIMEOUT);
+
   IO_Initialling();  
   Encoder_Initialling();  
   Serials_Init();
   Init_Timer0();
   Init_Timer1();
-  
+  pinOff(&LED_1);
+	
+	for(ii = 0; ii< 8000000; ii++)
+	{
+		 mn[1]++;
+	}
+	mn[1] = 0xEB;
+	pinOn(&LED_1);
+	parse_Message(mn,9,0xAD);
+			 
   GPIOINT_Init(&proxyPin, 3, PROXY_INT_PRIORITY, EXTI_POLARITY_HIGH_ACTIVE_OR_RISING_EDGE);
   //parse_Message_PC(nn,2,AC_STOP);
   //parse_Message_PC(nn,2,AC_FORWARD);
@@ -171,9 +229,16 @@ int main(void)
  
   while(1)
   {
+//		if(feedWDflage)
+//		{
+//			feedWDflage = 0;
+//			WDT_Feed();
+//		}
+		
 		rcvLen = UARTReceive(UART_RF,myData,maxBuff);
 		cntBuffLen = 0;
 		pinOn(&LED_3_rcvRF);
+		
 		while(cntBuffLen < rcvLen)
 		{
 			pinOff(&LED_3_rcvRF);
@@ -318,8 +383,11 @@ void TIMER0_IRQHandler(void)
 		TIM_ClearIntPending(LPC_TIM0, TIM_MR0_INT);
 		Cnt_timer0++;		
 		if(!(Cnt_timer0%200))
+		{
 			pinToggle(&LED_8);
-
+			feedWDflage = 1;
+							
+		}
 	
 		if(ReadDataFlg)
 		{
@@ -333,6 +401,7 @@ void TIMER0_IRQHandler(void)
 				if(Cnt!=0)
 				{  
 					Encoder_Data <<= 1;
+					//Encoder_Data = 1;
 					Encoder_Data |= pinStatus(&encoderData);
 				}
 			}
@@ -407,7 +476,7 @@ void Init_Timer0(void)
 {
 	// Initialize 4 timers, prescale count time of 100uS
 	TIM_ConfigStruct.PrescaleOption = TIM_PRESCALE_USVAL;
-	TIM_ConfigStruct.PrescaleValue	= 1;
+	TIM_ConfigStruct.PrescaleValue	= 2;
 
 	TIM_Init(LPC_TIM0, TIM_TIMER_MODE,&TIM_ConfigStruct);
 		// Configure 4 match channels
@@ -422,13 +491,13 @@ void Init_Timer0(void)
 	//Toggle MR0 pin if MR0 matches it
 	TIM_MatchConfigStruct.ExtMatchOutputType = TIM_EXTMATCH_NOTHING;
 	// Set Match value
-	TIM_MatchConfigStruct.MatchValue   = 4 - 1;
+	TIM_MatchConfigStruct.MatchValue   = 5 - 1;
 	// Set configuration for Tim_MatchConfig
 	TIM_ConfigMatch(LPC_TIM0,&TIM_MatchConfigStruct);
 		/* preemption = 1, sub-priority = 1 */
 	NVIC_SetPriority(TIMER0_IRQn, TIMER0_INT_PRIORITY);
 	/* Enable interrupt for timer 0 */
-//	NVIC_EnableIRQ(TIMER0_IRQn);
+	NVIC_EnableIRQ(TIMER0_IRQn);
 	// To start timer 0
 	TIM_Cmd(LPC_TIM0,ENABLE);
 }
@@ -463,8 +532,7 @@ void Init_Timer1(void)
 }
 
 void IO_Initialling(void)
-{
-	
+{	
   pinConfig(&LED_1);
   pinConfig(&LED_2);
   pinConfig(&LED_3_rcvRF);
@@ -498,15 +566,133 @@ void IO_Initialling(void)
 //  pinOff(&LED_8);
 }
 
+void IO_InitUnUsedPins(void)
+{
+		pinConfig(&UnUseP0_17);
+		pinOff(&UnUseP0_17);
+
+		pinConfig(&UnUseP0_18);
+		pinOff(&UnUseP0_18);
+
+		pinConfig(&UnUseP0_19);
+		pinOff(&UnUseP0_19);
+
+		pinConfig(&UnUseP0_21);
+		pinOff(&UnUseP0_21);
+
+		pinConfig(&UnUseP0_22);
+		pinOff(&UnUseP0_22);
+
+		pinConfig(&UnUseP0_23);
+		pinOff(&UnUseP0_23);
+
+		pinConfig(&UnUseP0_24);
+		pinOff(&UnUseP0_24);
+
+		pinConfig(&UnUseP0_26);
+		pinOff(&UnUseP0_26);
+
+		pinConfig(&UnUseP0_27_SDA0);
+		pinOff(&UnUseP0_27_SDA0);
+
+		pinConfig(&UnUseP0_28_SCL0);
+		pinOff(&UnUseP0_28_SCL0);
+
+		pinConfig(&UnUseP1_16);
+		pinOff(&UnUseP1_16);
+
+		pinConfig(&UnUseP1_17);
+		pinOff(&UnUseP1_17);
+
+		pinConfig(&UnUseP1_19);
+		pinOff(&UnUseP1_19);
+
+		pinConfig(&UnUseP1_20);
+		pinOff(&UnUseP1_20);
+
+		pinConfig(&UnUseP1_21_SCK0);
+		pinOff(&UnUseP1_21_SCK0);
+
+		pinConfig(&UnUseP1_22_SSEL0);
+		pinOff(&UnUseP1_22_SSEL0);
+
+		pinConfig(&UnUseP1_23_MISO0);
+		pinOff(&UnUseP1_23_MISO0);
+
+		pinConfig(&UnUseP1_24_MOSI0);
+		pinOff(&UnUseP1_24_MOSI0);
+
+		pinConfig(&UnUseP1_25_MOSI_SPin);
+		pinOff(&UnUseP1_25_MOSI_SPin);
+
+		pinConfig(&UnUseP1_29);
+		pinOff(&UnUseP1_29);
+
+		pinConfig(&UnUseP1_30_VAnalog1);
+		pinOff(&UnUseP1_30_VAnalog1);
+
+		pinConfig(&UnUseP1_31_VAnalog2);
+		pinOff(&UnUseP1_31_VAnalog2);
+
+		pinConfig(&UnUseP2_0);
+		pinOff(&UnUseP2_0);
+
+		pinConfig(&UnUseP2_1);
+		pinOff(&UnUseP2_1);
+
+		pinConfig(&UnUseP2_2);
+		pinOff(&UnUseP2_2);
+
+		pinConfig(&UnUseP2_3);
+		pinOff(&UnUseP2_3);
+
+		pinConfig(&UnUseP2_4);
+		pinOff(&UnUseP2_4);
+
+		pinConfig(&UnUseP2_5);
+		pinOff(&UnUseP2_5);
+
+		pinConfig(&UnUseP2_6);
+		pinOff(&UnUseP2_6);
+
+		pinConfig(&UnUseP2_7);
+		pinOff(&UnUseP2_7);
+
+		pinConfig(&UnUseP2_8);
+		pinOff(&UnUseP2_8);
+
+		pinConfig(&UnUseP2_9);
+		pinOff(&UnUseP2_9);
+
+		pinConfig(&UnUseP4_28);
+		pinOff(&UnUseP4_28);
+
+		pinConfig(&UnUseP4_29);
+		pinOff(&UnUseP4_29);
+
+		pinConfig(&UnUseP3_26);
+		pinOff(&UnUseP3_26);
+		
+}
+
 void Encoder_Initialling(void)
 {
+//	// Pin configuration
+//  PINSEL_CFG_Type PinCfg;
+//	PinCfg.Funcnum = 0;
+//	PinCfg.OpenDrain = 0;
+//	PinCfg.Pinmode = PINSEL_PINMODE_PULLDOWN;
+//	PinCfg.Pinnum = 8;
+//	PinCfg.Portnum = 0;
+//	PINSEL_ConfigPin(&PinCfg);
+	
   pinConfig(&encoderData);
   pinConfig(&encoderClock);
   pinOn(&encoderClock);
   pinOff(&encoderData);
+	
+	
 }
-
-
 
 /*----------------- INTERRUPT SERVICE ROUTINES --------------------------*/
 
