@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include "lpc17xx_exti.h"
 #include "lpc17xx_wdt.h"
+#include <stdlib.h>
 
 //timer initialization
 TIM_TIMERCFG_Type TIM_ConfigStruct;
@@ -142,11 +143,13 @@ union Data_16_8
   uint8_t u8[2];
 }u8to16;
 
-int Cnt = 0; char ReadDataFlg = 1;
-uint16_t Degree = 0, Rev = 0,RefDegree,RefRev;
+int Cnt = 0;
+uint8_t ReadDataFlg = 1;
+uint16_t Degree = 0, Rev = 0,RefDegree = 3743,RefRev = 4569;
+uint8_t readRef_Enc = 0;
 unsigned long Encoder_Data = 0;
 char temp[5];
-int tempCnt = 0;
+
 #endif
 
 #endif
@@ -186,8 +189,8 @@ int tempCnt = 0;
 #define	UART_Not_Assigned_IRQHandler	UART3_IRQHandler
 
 #endif
-uint8_t nn[2] = {0,0};
-uint8_t mn[8] = {0x23};
+uint8_t nn[250] = {0,0};
+uint8_t mn[250] = {0x23};
 uint32_t PC_Sent_Interval_cnt;
 
 uint8_t myData[100];
@@ -196,6 +199,9 @@ int rcvLen = 0;
 int cntBuffLen = 0;
 uint8_t feedWDflage = 0;
 
+uint16_t temp_RefRev, temp_RefDeg;
+
+long int CntTest = 0;
 int main(void)
 {
 	int ii =0;
@@ -209,7 +215,7 @@ int main(void)
   Init_Timer1();
   pinOff(&LED_1);
 	
-	for(ii = 0; ii< 8000000; ii++)
+	for(ii = 0; ii< 80000; ii++)
 	{
 		 mn[1]++;
 	}
@@ -227,6 +233,10 @@ int main(void)
    
   PC_Sent_Interval_cnt = 0;
  
+	while(0)
+	{
+			CntTest++;
+	}
   while(1)
   {
 //		if(feedWDflage)
@@ -235,6 +245,9 @@ int main(void)
 //			WDT_Feed();
 //		}
 		
+
+		CntTest++;
+
 		rcvLen = UARTReceive(UART_RF,myData,maxBuff);
 		cntBuffLen = 0;
 		pinOn(&LED_3_rcvRF);
@@ -271,14 +284,6 @@ int main(void)
 		{
 			motorStateFlag = 1;
 			motorStartFlag^= 1;
-//			if(motorStartFlag == 1)
-//			{
-//				pinOff(&LED_4_trs2PC);
-//			}
-//			else
-//			{
-//				pinOn(&LED_4_trs2PC);
-//			}
 		}		
   }
 }
@@ -297,27 +302,50 @@ uint16_t	u16_temp;
 int oneSendInTwo = 0;
 void parse_Message(uint8_t* msg, uint8_t Message_Length, uint8_t Message_ID)
 {
+	uint8_t wait4Cnt = 200;
 	if(Message_ID == msgTrans_RF_ID)		
 	{
+		NVIC_EnableIRQ(TIMER0_IRQn);
+		
+		while(ReadDataFlg == 1);
+		NVIC_DisableIRQ(TIMER0_IRQn);
+		Degree = (Encoder_Data & 0x0FFF);
+		Rev = (Encoder_Data >> 12);
+		Encoder_Data = 0;
+		ReadDataFlg = 1;
+	
+		msg[Message_Length]     = (Degree & 0xFF);
+		msg[Message_Length + 1] = (Degree >> 8);
+		msg[Message_Length + 2] = (Rev & 0xFF);
+		msg[Message_Length + 3] = (Rev >> 8);	
+		msg[Message_Length + 4] = (RefDegree & 0xFF);
+		msg[Message_Length + 5] = (RefDegree >> 8);
+		msg[Message_Length + 6] = (RefRev & 0xFF);
+		msg[Message_Length + 7] = (RefRev >> 8);
+		//if(!((oneSendInTwo++)%300))	
+		UARTSend(UART_PC, Make_Trans_Msg(msgTrans_PC_ID,msg,Message_Length + 8) , (Message_Length + 8 + TRANS_HEADER_NO_RF));
+		pinOff(&LED_4_trs2PC);
+	
+		if(readRef_Enc == 1) // 
+		{
+			int tempCnt = 1000;
+			readRef_Enc = 0;
+			while(tempCnt--)
+			{
+			}
+
 			NVIC_EnableIRQ(TIMER0_IRQn);
 			while(ReadDataFlg == 1);
 			NVIC_DisableIRQ(TIMER0_IRQn);
-			Degree = (Encoder_Data & 0x0FFF);
-			Rev = (Encoder_Data >> 12);
-			Encoder_Data = 0;
-			ReadDataFlg = 1;
-			
-			msg[Message_Length]     = (Degree & 0xFF);
-			msg[Message_Length + 1] = (Degree >> 8);
-			msg[Message_Length + 2] = (Rev & 0xFF);
-			msg[Message_Length + 3] = (Rev >> 8);	
-			msg[Message_Length + 4] = (RefDegree & 0xFF);
-			msg[Message_Length + 5] = (RefDegree >> 8);
-			msg[Message_Length + 6] = (RefRev & 0xFF);
-			msg[Message_Length + 7] = (RefRev >> 8);
-			//if(!((oneSendInTwo++)%300))	
-			UARTSend(UART_PC, Make_Trans_Msg(msgTrans_PC_ID,msg,Message_Length + 8) , (Message_Length + 8 + TRANS_HEADER_NO_RF));
-			pinOff(&LED_4_trs2PC);
+			temp_RefDeg = (Encoder_Data & 0x0FFF);
+			temp_RefRev = (Encoder_Data >> 12);
+						
+			if(abs((Degree - temp_RefDeg)) < 22)
+			{
+				RefRev = Rev;
+				RefDegree = Degree;
+			}			
+		}
 	}
 }
 
@@ -335,22 +363,30 @@ void parse_Message_PC(uint8_t* msg, uint8_t Message_Length, uint8_t Message_ID)
 	{
 		case AC_STOP:
 			UARTSend(UART_AC_Motor,AC_Stop_msg(),AC_MSG_LENGTH);
-			//Send_uint_AC(AC_Stop_msg(),AC_MSG_LENGTH);	
+			pinToggle(&LED_5);
+	
+		//Send_uint_AC(AC_Stop_msg(),AC_MSG_LENGTH);	
 			break;
 		
 		case AC_FORWARD:
 			UARTSend(UART_AC_Motor,AC_Forward_msg(),AC_MSG_LENGTH);			
-			//Send_uint_AC(AC_Forward_msg(),AC_MSG_LENGTH);
+			pinToggle(&LED_5);
+
+		//Send_uint_AC(AC_Forward_msg(),AC_MSG_LENGTH);
 			break;
 		
 		case AC_REVERSE:
 			UARTSend(UART_AC_Motor, AC_Reverse_msg(),AC_MSG_LENGTH);		
-			//Send_uint_AC(AC_Reverse_msg(),AC_MSG_LENGTH);	
+			pinToggle(&LED_5);
+
+		//Send_uint_AC(AC_Reverse_msg(),AC_MSG_LENGTH);	
 			break;
 		
 		case AC_EGC_STOP:
 			UARTSend(UART_AC_Motor, msgv,2);		
-			//Send_uint_AC(msgv,2);
+			pinToggle(&LED_5);
+	
+		//Send_uint_AC(msgv,2);
 			break;
 		
 		case AC_PARK:			
@@ -359,19 +395,25 @@ void parse_Message_PC(uint8_t* msg, uint8_t Message_Length, uint8_t Message_ID)
 		case AC_FREQ:
 			u16_temp = msg[0] + msg[1] * 256; 			
 			UARTSend(UART_AC_Motor,AC_Freq_msg(u16_temp),AC_MSG_LENGTH);			
-			//Send_uint_AC(AC_Freq_msg(u16_temp),AC_MSG_LENGTH);
+			pinToggle(&LED_5);
+
+		//Send_uint_AC(AC_Freq_msg(u16_temp),AC_MSG_LENGTH);
 		break;
 		
 		case AC_ACC:
 			u16_temp = msg[0] + msg[1] * 256;
 			UARTSend(UART_AC_Motor,AC_Accel_msg(u16_temp) ,AC_MSG_LENGTH);	
+			pinToggle(&LED_5);
+
 		//Send_uint_AC(AC_Accel_msg(u16_temp),AC_MSG_LENGTH);	
 			break;
 		
 		case AC_DEC:
 			u16_temp = msg[0] + msg[1] * 256;
 			UARTSend(UART_AC_Motor,AC_Decel_msg(u16_temp) ,AC_MSG_LENGTH);							
-			//Send_uint_AC(AC_Decel_msg(u16_temp),AC_MSG_LENGTH);
+			pinToggle(&LED_5);
+
+		//Send_uint_AC(AC_Decel_msg(u16_temp),AC_MSG_LENGTH);
 			break;
 	}
 }
@@ -384,7 +426,7 @@ void TIMER0_IRQHandler(void)
 		Cnt_timer0++;		
 		if(!(Cnt_timer0%200))
 		{
-			pinToggle(&LED_8);
+			//pinToggle(&LED_8);
 			feedWDflage = 1;
 							
 		}
@@ -408,8 +450,8 @@ void TIMER0_IRQHandler(void)
 			Cnt++;
 			if(Cnt > 57)
 			{
-				Cnt = 0;
 				ReadDataFlg = 0;
+				Cnt = 0;
 			}
 		}
 	}	
@@ -425,13 +467,14 @@ void TIMER1_IRQHandler(void)
 	if (TIM_GetIntStatus(LPC_TIM1, TIM_MR0_INT)== SET)
 	{
 		TIM_ClearIntPending(LPC_TIM1, TIM_MR0_INT);
-		
+	
 		if(!flageMCU_RotaryAlive)
 		{
 			if(++CntMCU_RotaryAlive == 7)
 			{
 				CntMCU_RotaryAlive = 0;
 				mn[1] = 0xF8;
+				
 				parse_Message(mn,9,0xAD);
 			}
 		}
@@ -440,8 +483,8 @@ void TIMER1_IRQHandler(void)
 		{
 			//CntTimer1_LED = 0;
 			flageMCU_RotaryAlive = 0;
-			pinToggle(&LED_2);
-			pinOn(&LED_4_trs2PC);
+			
+			pinToggle(&LED_8);
 			//UARTSend(UART_RF,kkTest,1);
 			CntMCU_RotaryAlive = 0;
 			//parse_Message(mn,1);
@@ -452,6 +495,7 @@ void TIMER1_IRQHandler(void)
 			cntTimer_1 = 0;
 			if(!aliveConnectionFlg)
 			{
+				pinToggle(&LED_2);
 				parse_Message_PC(nn,2,AC_STOP);
 			}			
 			aliveConnectionFlg = 0;
@@ -840,7 +884,6 @@ void EINT3_IRQHandler(void)
 {
   if (GPIO_IntCheck(&proxyPin, EXTI_POLARITY_HIGH_ACTIVE_OR_RISING_EDGE))
   {
-		RefRev = Rev;
-		RefDegree = Degree;		
+		readRef_Enc = 1;	
   }
 }
