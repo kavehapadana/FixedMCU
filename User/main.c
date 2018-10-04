@@ -45,6 +45,10 @@ FunctionalState LEDStatus = ENABLE;
 #define PROXY_INT_PRIORITY    11
 #define TIMER0_INT_PRIORITY   10
 #define TIMER1_INT_PRIORITY   20
+#define TIMER2_INT_PRIORITY   22
+
+
+#define _10msNoOfCheckHighMagnetProxy				4
 
 //Declare WatchDog Error 
 #define WDT_TIMEOUT 2000000
@@ -145,7 +149,7 @@ union Data_16_8
 
 int Cnt = 0;
 uint8_t ReadDataFlg = 1;
-uint16_t Degree = 0, Rev = 0,RefDegree = 3743,RefRev = 4569;
+uint16_t Degree = 0, Rev = 0,RefDegree = 3396,RefRev = 4569;
 uint8_t readRef_Enc = 0;
 unsigned long Encoder_Data = 0;
 char temp[5];
@@ -157,8 +161,10 @@ char temp[5];
 	void external_Interrupt_Fnc(uint8_t _mask);
 	void TIMER0_IRQHandler(void);
 	void TIMER1_IRQHandler(void);
+	void TIMER2_IRQHandler(void);
 	void Init_Timer0(void);
 	void Init_Timer1(void);
+	void Init_Timer2(void);
 	void IO_Initialling(void);
   void IO_InitUnUsedPins(void);
 	void Encoder_Initialling(void);
@@ -204,15 +210,16 @@ uint16_t temp_RefRev, temp_RefDeg;
 long int CntTest = 0;
 int main(void)
 {
-	int ii =0;
-	//WDT_Init(WDT_CLKSRC_IRC, WDT_MODE_RESET);
-	//WDT_Start(WDT_TIMEOUT);
+	long int ii =0;
+	WDT_Init(WDT_CLKSRC_IRC, WDT_MODE_RESET);
+	WDT_Start(WDT_TIMEOUT);
 
   IO_Initialling();  
   Encoder_Initialling();  
   Serials_Init();
   Init_Timer0();
   Init_Timer1();
+	Init_Timer2();
   pinOff(&LED_1);
 	
 	for(ii = 0; ii< 80000; ii++)
@@ -223,9 +230,9 @@ int main(void)
 	pinOn(&LED_1);
 	parse_Message(mn,9,0xAD);
 			 
-  GPIOINT_Init(&proxyPin, 3, PROXY_INT_PRIORITY, EXTI_POLARITY_HIGH_ACTIVE_OR_RISING_EDGE);
-  //parse_Message_PC(nn,2,AC_STOP);
-  //parse_Message_PC(nn,2,AC_FORWARD);
+  GPIOINT_Init(&proxyPin, 3, PROXY_INT_PRIORITY, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
+  // parse_Message_PC(nn,2,AC_STOP);
+  // parse_Message_PC(nn,2,AC_FORWARD);
   
   proxyStateFlag = 0; 
   motorStateFlag = 0;
@@ -239,13 +246,12 @@ int main(void)
 	}
   while(1)
   {
-//		if(feedWDflage)
-//		{
-//			feedWDflage = 0;
-//			WDT_Feed();
-//		}
+		if(feedWDflage)
+		{
+			feedWDflage = 0;
+			WDT_Feed();
+		}
 		
-
 		CntTest++;
 
 		rcvLen = UARTReceive(UART_RF,myData,maxBuff);
@@ -324,7 +330,7 @@ void parse_Message(uint8_t* msg, uint8_t Message_Length, uint8_t Message_ID)
 		msg[Message_Length + 7] = (RefRev >> 8);
 		//if(!((oneSendInTwo++)%300))	
 		UARTSend(UART_PC, Make_Trans_Msg(msgTrans_PC_ID,msg,Message_Length + 8) , (Message_Length + 8 + TRANS_HEADER_NO_RF));
-		pinOff(&LED_4_trs2PC);
+		pinToggle(&LED_4_trs2PC);
 	
 		if(readRef_Enc == 1) // 
 		{
@@ -423,13 +429,7 @@ void TIMER0_IRQHandler(void)
 	if (TIM_GetIntStatus(LPC_TIM0, TIM_MR0_INT)== SET)
 	{
 		TIM_ClearIntPending(LPC_TIM0, TIM_MR0_INT);
-		Cnt_timer0++;		
-		if(!(Cnt_timer0%200))
-		{
-			//pinToggle(&LED_8);
-			feedWDflage = 1;
-							
-		}
+
 	
 		if(ReadDataFlg)
 		{
@@ -462,12 +462,20 @@ uint32_t CntTimer1_LED = 0;
 
 char flageLED =0;
 uint8_t kkTest[1] = {0x44};
+
+int cntTimer2 = 0;
 void TIMER1_IRQHandler(void)
 {	 
 	if (TIM_GetIntStatus(LPC_TIM1, TIM_MR0_INT)== SET)
 	{
 		TIM_ClearIntPending(LPC_TIM1, TIM_MR0_INT);
 	
+		Cnt_timer0++;		
+		if(!(Cnt_timer0%8))
+		{
+			feedWDflage = 1;			
+		}
+		
 		if(!flageMCU_RotaryAlive)
 		{
 			if(++CntMCU_RotaryAlive == 7)
@@ -516,6 +524,36 @@ void TIMER1_IRQHandler(void)
 	}
 }
 
+
+
+void TIMER2_IRQHandler(void)
+{
+
+	if (TIM_GetIntStatus(LPC_TIM2, TIM_MR0_INT)== SET)
+	{
+		int pinStatus_test = pinStatus(&proxyPin);
+
+		TIM_ClearIntPending(LPC_TIM2, TIM_MR0_INT);
+
+		if(pinStatus_test)
+		{
+			cntTimer2++;
+			if(cntTimer2 > _10msNoOfCheckHighMagnetProxy)
+			{
+				readRef_Enc = 1;
+				TIM_Cmd(LPC_TIM2,DISABLE);				
+				cntTimer2 = 0;					
+			}
+		}
+		else
+		{	
+			readRef_Enc = 0;	
+			cntTimer2 = 0;
+			TIM_Cmd(LPC_TIM2,DISABLE); 
+		}		
+	}
+}
+
 void Init_Timer0(void)
 {
 	// Initialize 4 timers, prescale count time of 100uS
@@ -543,7 +581,7 @@ void Init_Timer0(void)
 	/* Enable interrupt for timer 0 */
 	NVIC_EnableIRQ(TIMER0_IRQn);
 	// To start timer 0
-	TIM_Cmd(LPC_TIM0,ENABLE);
+	TIM_Cmd(LPC_TIM0,ENABLE); // **TODO** CMD or NVIC for disable Timer
 }
 
 void Init_Timer1(void)
@@ -564,7 +602,7 @@ void Init_Timer1(void)
 	//Toggle MR0 pin if MR0 matches it
 	TIM_MatchConfigStruct.ExtMatchOutputType = TIM_EXTMATCH_NOTHING;
 	// Set Match value
-	TIM_MatchConfigStruct.MatchValue   = 50 - 1; // x - 1 : x is matchvalue // 4 KHz / 5 = 800 Hz
+	TIM_MatchConfigStruct.MatchValue   = 50 - 1; // x - 1 : x is matchvalue // 4 KHz / 5 = 80 Hz
 	// Set configuration for Tim_MatchConfig
 	TIM_ConfigMatch(LPC_TIM1,&TIM_MatchConfigStruct);
 		/* preemption = 1, sub-priority = 1 */
@@ -573,6 +611,38 @@ void Init_Timer1(void)
 	NVIC_EnableIRQ(TIMER1_IRQn);
 	// To start timer 0
 	TIM_Cmd(LPC_TIM1,ENABLE);
+}
+
+
+void Init_Timer2(void)
+{
+	// Initialize 4 timers, prescale count time of 100uS
+	TIM_ConfigStruct.PrescaleOption = TIM_PRESCALE_USVAL;
+	TIM_ConfigStruct.PrescaleValue	= 20;
+
+	TIM_Init(LPC_TIM2, TIM_TIMER_MODE,&TIM_ConfigStruct);
+		// Configure 4 match channels
+	// use channel 0, MR0
+	TIM_MatchConfigStruct.MatchChannel = 0;
+	// Enable interrupt when MR0 matches the value in TC register
+	TIM_MatchConfigStruct.IntOnMatch   = TRUE;
+	//Enable reset on MR0: TIMER will reset if MR0 matches it
+	TIM_MatchConfigStruct.ResetOnMatch = TRUE;
+	//Stop on MR0 if MR0 matches it
+	TIM_MatchConfigStruct.StopOnMatch  = FALSE;
+	//Toggle MR0 pin if MR0 matches it
+	TIM_MatchConfigStruct.ExtMatchOutputType = TIM_EXTMATCH_NOTHING;
+	// Set Match value
+	TIM_MatchConfigStruct.MatchValue   = 419 - 1;
+	// Set configuration for Tim_MatchConfig
+	TIM_ConfigMatch(LPC_TIM2,&TIM_MatchConfigStruct);
+		/* preemption = 1, sub-priority = 1 */
+	NVIC_SetPriority(TIMER2_IRQn, TIMER2_INT_PRIORITY);
+	/* Enable interrupt for timer 2 */
+	NVIC_EnableIRQ(TIMER2_IRQn);
+
+	// To stop timer 2
+	TIM_Cmd(LPC_TIM2,DISABLE);
 }
 
 void IO_Initialling(void)
@@ -882,8 +952,12 @@ void UART_Not_Assigned_IRQHandler(void)
 
 void EINT3_IRQHandler(void)
 {
-  if (GPIO_IntCheck(&proxyPin, EXTI_POLARITY_HIGH_ACTIVE_OR_RISING_EDGE))
-  {
-		readRef_Enc = 1;	
+  if (GPIO_IntCheck(&proxyPin, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE))
+  {		
+		// To start timer 2 for checking real intrrupt of magenetic sensor
+		//int pinStatus_test = pinStatus(&proxyPin);
+	
+		TIM_Cmd(LPC_TIM2,ENABLE);
+		//	readRef_Enc = 1;		
   }
 }
